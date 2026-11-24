@@ -4,6 +4,27 @@
 
 这是一个基于 OpenResty Lua 生态开发的 WebSocket 反向代理网关模块，核心作用是在 Nginx Worker 进程内部维护与多个后端 WebSocket 服务的长连接池，对外提供高可靠的请求转发能力。模块通过协程隔离、信号量同步、心跳保活等机制，解决了传统短代理模式下的连接复用率低、后端服务压力大、请求状态难追踪等问题，适用于聊天、游戏等需要长连接交互的实时业务场景。
 
+```
+handler          lib/gateway           sender_loop        上游 chat          reader_loop
+   │                  │                    │                  │                  │
+   │─call("chat",m)──►│                    │                  │                  │
+   │                  ├─reqid             │                  │                  │
+   │                  ├─pending[reqid]    │                  │                  │
+   │                  ├─send_q:push ─────►│                  │                  │
+   │                  ├─send_sema:post    │                  │                  │
+   │                  │                   ├─c:send_text ────►│                  │
+   │                  │                   │                  │                  │
+   │─sema:wait ──────►│                   │                  ├─处理业务         │
+   │                  │                   │                  ├─回包(text) ─────►│
+   │                  │                   │                  │                  ├─recv_frame
+   │                  │                   │                  │                  ├─decode
+   │                  │◄───────────────────────────────────────────────────────  │
+   │                  │◄─ p.resp+=data   │                  │                  │
+   │                  │   p.sema:post    │                  │                  │
+   │◄─ return resp ───┤                   │                  │                  │
+   │                                                                              │    
+```
+
 ## 核心依赖
 
 模块基于以下成熟开源组件构建，保证了运行稳定性：
